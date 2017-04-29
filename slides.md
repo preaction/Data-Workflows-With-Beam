@@ -1,7 +1,7 @@
 
-# TALK_NAME
+# Data Workflows With Beam
 
-<http://preaction.github.io/REPO_NAME/>
+<http://preaction.github.io/Data-Workflows-With-Beam/>
 
 <div style="width: 40%; float: left">
 
@@ -17,9 +17,9 @@ by [Doug Bell](http://preaction.me)
 </div>
 <div style="width: 40%; float: left">
 
-[<i class="fa fa-file-text-o"></i> Notes](https://github.com/preaction/REPO_NAME/blob/master/NOTES.md)  
+[<i class="fa fa-file-text-o"></i> Notes](https://github.com/preaction/Data-Workflows-With-Beam/blob/master/NOTES.md)  
 <small> </small>  
-[Source on <i class="fa fa-github"></i>](https://github.com/preaction/REPO_NAME/)  
+[Source on <i class="fa fa-github"></i>](https://github.com/preaction/Data-Workflows-With-Beam/)  
 
 [CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/legalcode)  
 

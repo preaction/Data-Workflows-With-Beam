@@ -1,0 +1,16 @@
+$summary: Tasks for the interest rates table
+
+common:
+    $class: Beam::Wire
+    file: common.yml
+
+extract:
+    $extends: common/database
+    table: rates
+
+dump:
+    $class: ETL::Earl::Runner
+    source:
+        $ref: extract
+    destination:
+        $ref: common/dumper

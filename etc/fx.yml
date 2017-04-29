@@ -1,0 +1,30 @@
+$summary: Tasks for foreign exchange data
+
+common:
+    $class: Beam::Wire
+    file: common.yml
+
+fed_g5:
+    $class: ETL::Earl::Extract::FX::FedG5
+
+ecb_ref:
+    $class: ETL::Earl::Extract::FX::ECBRef
+
+dump_fed_g5:
+    $class: ETL::Earl::Runner
+    source:
+        $ref: fed_g5
+    transforms:
+        - $ref: common/rows_to_series
+        - $ref: common/fill_backward
+    destination:
+        $ref: common/dumper
+
+dump_ecb_ref:
+    $class: ETL::Earl::Runner
+    source:
+        $ref: ecb_ref
+    transforms:
+        - $ref: common/rows_to_series
+    destination:
+        $ref: common/dumper

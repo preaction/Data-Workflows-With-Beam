@@ -1,0 +1,24 @@
+
+dbh:
+    $class: DBI
+    $method: connect
+    $args:
+        - dbi:SQLite:test.db
+
+database:
+    $class: ETL::Earl::Extract::DBI
+    dbh:
+        $ref: dbh
+
+dumper:
+    $class: ETL::Earl::Load::Dump
+
+rows_to_series:
+    $class: ETL::Earl::Transform::RowsToSeries
+
+fill_forward:
+    $class: ETL::Earl::Transform::FillForward
+
+fill_backward:
+    $class: ETL::Earl::Transform::FillBackward
+

@@ -1,0 +1,15 @@
+$summary: Tasks for government bonds
+
+common:
+    $class: Beam::Wire
+    file: common.yml
+
+fed_h15:
+    $class: ETL::Earl::Extract::Govt::FedH15
+
+dump_fed_h15:
+    $class: ETL::Earl::Runner
+    source:
+        $ref: fed_h15
+    destination:
+        $ref: common/dumper
