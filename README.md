@@ -47,6 +47,12 @@ About the author.
 
 Speaking credentials.
 
+# HISTORY
+
+* Topic first discussed at [Chicago.PM](http://chicago.pm.org) -- April 2017
+* Completely rewritten for [The Perl Conference
+  2017](http://www.perlconference.us/tpc-2017-dc/) -- June 2017
+
 # COPYRIGHT AND LICENSE
 
 Copyright 2017 Doug Bell <preaction@cpan.org>
