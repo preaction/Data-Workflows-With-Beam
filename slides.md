@@ -997,7 +997,7 @@ fade-in">package My::Load::DBI; use Moo;</span>
 <span class="fragment fade-in">has dbh => ( is => 'ro', required => 1 );</span>
 <span class="fragment fade-in">has table => ( is => 'ro', required => 1 );</span>
 <span class="fragment fade-in">sub run {
-  my ( $self, $id ) = @_;</span>
+  my ( $self, @ts ) = @_;</span>
   <span class="fragment fade-in">my $table = $self->table;</span>
   for my $pt ( @ts ) {
     $dbh-&gt;do(
