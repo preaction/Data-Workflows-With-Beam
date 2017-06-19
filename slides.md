@@ -9,6 +9,7 @@ by [Doug Bell](http://preaction.me)
 <small>(he, him, his)</small>  
 [<i class="fa fa-twitter"></i> @preaction](http://twitter.com/preaction)  
 [<i class="fa fa-github"></i> preaction](http://github.com/preaction)  
+<img src="http://chicago.pm.org/theme/images/chicagopm-small.png" style="border: none; vertical-align: middle" />
 [Chicago.PM](http://chicago.pm.org)  
 
 </div>
