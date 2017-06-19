@@ -1,4 +1,11 @@
 
+log:
+    $class: Log::Any::Adapter
+    $lifecycle: eager
+    $method: set
+    $args:
+        - 'Stderr'
+
 dbh:
     $class: DBI
     $method: connect

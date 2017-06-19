@@ -13,6 +13,8 @@ ETL::Earl::Runner - Run an ETL::Earl job
 use v5.24;
 use Moo;
 use experimental 'signatures';
+use Log::Any '$LOG';
+use Scalar::Util qw( blessed );
 with 'Beam::Runnable';
 
 has source => (
@@ -29,10 +31,13 @@ has transforms => (
 );
 
 sub run( $self, @args ) {
+    $LOG->info( 'Reading data from source ' . blessed $self->source );
     my @data = $self->source->read;
     for my $xform ( @{ $self->transforms } ) {
+        $LOG->info( 'Transforming data with ' . blessed $xform );
         @data = $xform->transform( @data );
     }
+    $LOG->info( 'Writing data to destination ' . blessed $self->destination );
     $self->destination->write( @data );
 }
 
