@@ -1,199 +1,288 @@
 
-The larger an application gets, the more likely it is that it will
-require some kind of external configuration file. As common tasks are
-made into modules, there will come a need to create multiple tasks that
-vary only in small ways easily accessible to non-programmers.
+This talk is not about data. I don't know your data, so I don't know how
+to help you with your data. My current data is CPAN Testers reports:
+When people run the built-in tests for a CPAN module, they have the
+option of sending that test report to CPAN Testers. CPAN Testers
+processes that data into useful reports for CPAN authors with some very
+simple transformations from large data structure to relational tables.
+In the past, I've dealt with financial time series data. Foreign
+exchange data, government bond data, and interest rate data combined and
+transformed and correlated and adjusted into dozens of configurations
+stored in multiple databases for hundreds of downstream systems to
+consume. These two kinds of data could not be more different, but they
+have some similar computing problems that can be satisfied with the same
+code.
 
-As an example, let's consider a massive market data platform. Incoming
-foreign exchange rates, government bond prices, interest rates, and
-other data are polled from market data providers, stored in a database,
-and analyses performed. There are thousands of different data streams,
-but most of them require the same few operations: Extract the live data,
-transform into the format our database(s) expect, and load into the
-database. This pattern is common enough that it's given a name: Extract,
-Transform, Load (ETL).
+So this talk is not about data. It's about workflows. It's about
+configuration. It's about execution. It's about everything but the data
+itself.
 
-A good ETL framework is organized into small, modular bits: Extractors
-know how to read from a source into an internal format, Loaders know how
-to write to a destination from that internal format, and Transformers
-manipulate data in that internal format in a variety of ways. With this
-well-defined API between modules, we can quickly and easily add new data
-feeds or storage to our system, and create new transformations confident
-that they will work with any data we throw at it.
+So since this isn't about data, let's start with some code for
+processing data. What this does isn't important, but you're curious, so
+I'll say that it calculates the movement of a time series. So, for each
+day, how much did the value change?
 
-But this talk isn't about writing an ETL framework. This talk is about
-how you can use the Beam framework to avoid writing most of an ETL
-framework, allowing you to focus on the important parts.
+    # Extract
+    my $id = shift @ARGV;
+    my @raw_ts = $dbh->selectall_array(
+        'SELECT * FROM bonds WHERE cusip=?', [ $id ]
+    );
 
-# Configuration with Beam::Wire
-
-Beam::Wire is, in technical terms, an inversion of control container.
-That's not important. What's important is that we can use YAML to
-describe how to construct objects. So, if we have a module that allows
-us to read from a SQL database using DBI called ETL::Earl::Extract::DBI,
-we can configure a real DBI object like so:
-
-    dbh:
-        $class: DBI
-        $method: connect
-        $args:
-            - 'dbi:mysql:fx_rates'
-            - fxuser
-            - fxpassword
-
-First, the name of the object we're creating is `dbh`. This will be
-important later when we need to refer to it. The `$class` sets the class
-of the object. `$method` sets the constructor method (DBI uses
-`connect`). `$args` sets the arguments. DBI takes an array of arguments
-which the first is the data source name (DSN), the second is the user,
-the third is the password.
-
-Now that we have a DBI object, we can create our ETL::Earl::Extract::DBI
-object and pass it in:
-
-    extract:
-        $class: ETL::Earl::Extract::DBI
-        dbh:
-            $ref: dbh
-        table: rates_raw
-
-First, I don't need to specify `$method` if the constructor is `new`,
-which I'm using Moo so that's true. Second, I don't need to use `$args`
-if it's a list of name/value pairs, which I'm using Moo so that's true.
-Last, I pass in the constructed DBI object by using `$ref` and giving it
-the name.
-
-Now when I ask Beam::Wire to give me the `extract` object, it will
-construct our DBI object, pass it in to the ETL::Earl::Extract::DBI
-constructor, and give me the result. Translated, it would look like this
-Perl:
-
-    my $dbh = DBI->connect( 'dbi:mysql:fx_rates', 'fxuser', 'fxpassword' );
-    my $extract = ETL::Earl::Extract::DBI->new( dbh => $dbh );
-
-We can continue in this way to configure more extractors, transforms,
-and loaders.
-
-## Re-using configuration
-
-So far, I haven't shown anything too onerous to write yourself in code,
-but Beam::Wire has a few features that make it easy to manage large data
-platforms.
-
-### extends
-
-We can share configuration between a lot of objects using `$extends`.
-For example, we had a `table` in our ETL::Earl::Extract::DBI object, so
-to make a bunch of them that all share the same database connection
-info, we could do:
-
-    database:
-        $class: ETL::Earl::Extract::DBI
-        dbh:
-            $ref: dbh
-
-    rates_db:
-        $extends: database
-        table: rates
-
-    fx_db:
-        $extends: database
-        table: fx
-
-    bonds_db:
-        $extends: database
-        table: bonds
-
-By using `$extends`, the individual `*_db` objects get their `$class`
-and `dbh` from the `database` configuration. Now if we need to change
-where our database lives, we only have to change one object, the
-`database` object.
-
-### Inner containers
-
-If we have a whole collection of objects that we want to share, we can
-consume a whole container by configuring another Beam::Wire object as
-a service.
-
-    common:
-        $class: Beam::Wire
-        file: common.yml
-
-The `file` points to a file relative to the current config file and
-loads it as a Beam::Wire object. We can access the objects inside by
-using `common/<object_name>`. So, if our `database` object was inside
-`common.yml`, we could extend it by doing:
-
-    rates_db:
-        $extends: common/database
-        table: rates
-
-This lets us organize our configuration effectively to keep like objects
-close together and shared objects all in one place.
-
-# Execution with Beam::Runner
-
-Now that we have our objects defining the various things we can do, we
-need to assemble them into an actual "task". Beam provides a way for us
-to do this with minimal code using Beam::Runner. Beam::Runner takes
-a Beam::Wire configuration file and an object that implements a `run`
-method, and then it runs it.
-
-So, our basic runner class could be:
-
-    package ETL::Earl::Run;
-    use Moo;
-    has source => ( is => 'ro' );
-    has destination => ( is => 'ro' );
-    has transforms => ( is => 'ro' );
-    sub run {
-        my ( $self, @args ) = @_;
-        my @data = $self->source->read;
-        for my $xform ( @{ $self->transforms } ) {
-            @data = $xform->xform( @data );
-        }
-        $self->destination->write( @data );
+    # Transform
+    my @move_ts;
+    my $prev_point = shift @ts;
+    for my $point ( @ts ) {
+        push @move_ts, {
+            stamp => $point->{stamp},
+            value => $point->{value} - $prev_point->{value},
+        };
+        $prev_point = $point;
     }
 
-This is very similar to App::Cmd and MooseX::Runnable, so what does
-Beam::Runner get us?
+    # Load
+    for my $point ( @move_ts ) {
+        $dbh->do(
+            'REPLACE INTO bonds_move ( stamp, value ) VALUES ( ?, ? )',
+            [ $point->{qw( stamp value )} ],
+        );
+    }
 
-### Discoverable
+This is a perfectly useful bit of code. We give it an identifier as an
+argument on the command-line, and this script extracts the bond data,
+transforms it into the daily movement, and loads it into another table.
 
-Beam::Runner knows where all your runnable objects are: It can look
-inside all of your containers and list your runnable objects. Using the
-`beam list` command that comes with Beam::Runner, you get a list of all
-the tasks you can run.
+But we can't yet call it a program:
 
-### Documented
+* We've got a database connection we need to configure, so we need
+  a configuration file
+* We need to write some tests to verify it works, so we need to make it
+  testable
+* We need to be able to deploy it to our production servers
 
-Each task's documentation can be viewed with the `beam help` command.
-This read's the module's documentation much like Pod::Usage does (the
-`NAME`, `SYNOPSIS`, `DESCRIPTION`, and other POD sections) and displays
-it for the end-user.
+So, we need to do everything but the data.
 
-### Extensible
+In Perl, the best way to make something testable, configurable, and
+deployable is to put it in a module. In programming, the best way to
+make something reusable is to make it into an object. So we'll do both
+of those things: We'll put our code in a module named "My::DailyChange",
+turn it into an object class with the "Moo" library, create a "dbh"
+attribute to hold our database handle, and put all of our code in
+a "run" method.
 
-And finally, having a known calling convention (much like our
-constructor did) allows us to build on top and create new ways to
-execute our tasks, for example, Beam::Minion.
+    package My::DailyChange;
+    use v5.26;
+    use Moo;
+    has dbh => ( is => 'ro', required => 1 );
+    sub run ( $self, $id ) {
+        # Extract
+        my @raw_ts = $self->dbh->selectall_array(
+            'SELECT * FROM bonds WHERE cusip=?', [ $id ]
+        );
 
-# Job Queueing with Beam::Minion
+        # Transform
+        my @move_ts;
+        my $prev_point = shift @ts;
+        for my $point ( @ts ) {
+        push @move_ts, {
+                stamp => $point->{stamp},
+                value => $point->{value} - $prev_point->{value},
+            };
+            $prev_point = $point;
+        }
 
-Eventually our jobs are going to require more hardware. There's only so
-much software can do. Since we have a common calling convention
-(Beam::Runner) and a common configuration (Beam::Wire), we can very
-easily distribute our jobs using a job queue like Minion. I've taken the
-liberty of writing Beam::Minion to do just this.
+        # Load
+        for my $point ( @move_ts ) {
+            $self->dbh->do(
+                'REPLACE INTO bonds_move ( stamp, value ) VALUES ( ?, ? )',
+                [ $point->{qw( stamp value )} ],
+            );
+        }
+    }
 
-To get Beam::Minion working, we need to have Beam::Runner working. So,
-we need a Beam::Wire configuration and a runnable object inside. Once
-we've done that, we can spawn a Beam::Minion worker:
+So, this is easily-testable: Load My::DailyChange, give it a database
+handle, call the "run" method, and see what happens. It's also
+easily-deployable with any kind of CPAN toolchain (I prefer
+Dist::Zilla).
 
-    beam minion worker <container>
+We do need a way to run it, though, and a way to tell it what database
+connection information to use. Rather than writing our own code for
+this, which would be pretty easy:
 
-This worker will run any job that's in the container file you give it.
-That's it. Now we can run a job:
+    use My::DailyChange;
+    my $script = My::DailyChange->new(
+        dbh => DBI->connect( 'dbi:SQLite:data.db' ),
+    );
+    $script->run( @ARGV );
 
-    beam minion run <container> <task> <args...>
+Instead let's use code someone (me) already wrote: Beam::Runner.
+
+Beam::Runner takes a module exactly like we've written and runs it.
+That's not the valuable part. The valuable parts are that it also can:
+
+* Easily configure any number of instances of our module
+* List all of the runnable modules we've configured
+* Show documentation for the module
+* Run the module on a distributed job queue
+
+To get started using Beam::Runner, we need to mark our module as
+runnable:
+
+    package My::DailyChange;
+    use v5.26;
+    use Moo;
+    with 'Beam::Runnable';
+
+Done. When we add the Beam::Runnable role to our class, we've created
+a Beam::Runner "task".
+
+Next, we need to write a configuration file for our module. We need to
+give our task a name (how about daily_change?), then we tell it to use
+our My::DailyChange module. Finally, we create a DBI object for it. Once
+again we give a class (DBI), and now we give a method to call (connect),
+and arguments to give (the DSN).
+
+    # etc/bond.yml
+    daily_change:
+        $class: My::DailyChange
+        dbh:
+            $class: DBI
+            $method: connect
+            $args:
+                - 'dbi:SQLite:data.db'
+
+This is all processed by Beam::Wire
+
+Once we have our configuration file, we need to tell Beam::Runner where
+to find it by setting the `BEAM_PATH` environment variable:
+
+    $ export BEAM_PATH=etc
+
+Now we can run our task by giving the name of the config file and the
+name of the task:
+
+    $ beam run bond daily_change <bond_id>
+
+Any additional arguments are given to the `run()` method.
+
+So that's the basics of Beam::Runner. It's okay to be underwhelmed, so
+far I've saved you from writing 10 lines of code. There are some little
+things like the list of tasks we could run:
+
+    $ beam list
+    bond
+    - daily_change -- My::DailyChange
+
+But though that's useful, and your operations team will love you for it,
+it's not very exciting. But this abstraction allows us to do a lot of
+other things:
+
+For one, we can make sure that only one instance of our task is being
+run at a time by adding the Beam::Runnable::Single role. We don't even
+have to change our code to add the role, we can do that in the
+configuration file:
+
+    # etc/bond.yml
+    daily_change:
+        $class: My::DailyChange
+        dbh:
+            $class: DBI
+            $method: connect
+            $args:
+                - 'dbi:SQLite:data.db'
+        $with:
+            - Beam::Runnable::Single
+        pid_file: /var/run/bond-daily_change.pid
+
+We compose the role with `$with`, and give it a PID file path to use
+using the `pid_file` attribute. Now, only one instance of our task can
+be run at a time. If another one tries to be run, it will exit with an
+error message. There's a couple other small, useful things like this
+included in Beam::Runner:
+
+* The Beam::Runnable::Timeout::Alarm role uses the `alarm` Perl function
+  to set a timeout for your script to limit execution. After the timeout
+  is reached, the script will exit with an error code.
+* The Beam::Runnable::AllowUsers role will restrict who can run the task
+  to the given list of users.
+
+Other roles like this could be created:
+
+* Memory limits could be enforced with a role
+* The task could be run as a different user with a role
+* With a role, the task could be re-tried if it fails
+* Simple parallelization could be done with fork over the arguments to
+  run() (much like GNU Parallel)
+
+None of these roles not require any knowledge of what the task is doing,
+but they simplify the job of processing data.
+
+Another thing this abstraction allows us to do is distribute our jobs to
+other machines. I've written Beam::Minion to distribute Beam::Runner
+jobs using the Minion task runner. For this to work, we don't need to
+change any code or configuration, we just need to install Beam::Minion,
+configure a database connection for it, and start a worker:
+
+    $ cpanm Beam::Minion Minion::Backend::SQLite
+    $ export BEAM_MINION="sqlite:///tmp/minion.db" # For true distributing to other machines, try Postgres or MySQL
+    $ beam minion worker
+
+And then in another terminal we can start our job:
+
+    $ export BEAM_MINION="sqlite:///tmp/minion.db"
+    $ beam minion run bond daily_change
+
+And our task will be run on our worker.
+
+With this simple abstraction, we've:
+
+* Created a runnable module
+* Configured an instance of our module and given it a database to use
+* Easily enabled testing of our module
+* Prevented our task from running more than once at a time
+* Run our task on a distributed processing system
+
+Those are the benefits that Beam::Runner can provide externally, but
+there are other benefits that Beam::Wire can provide internally. If we
+go back to our script, it was divided into three parts: Extract,
+Transform, Load
+
+Let's break those each into its own module. This is a common enough
+pattern that it has a name: Extract, Transform, Load, or ETL.
+
+The extractor reads from somewhere and provides us with data in a common
+format (for us, an array of hashrefs with "stamp" and "value" fields,
+which we'll just call a time series).
+
+For our extractor, we'll need a database handle, but we'll also take
+a table name as an attribute. This way we can extract data from whatever
+database table we want.
+
+The transformer takes a time series and returns a time series after
+having done something, just as before. Nothing really changes here.
+
+The loader takes the common data format and writes it to somewhere. Just
+like our extractor, we need a database handle, and a table name to write
+to.
+
+Finally, we need a module that will bring them all together: Extract
+data from the extractor, transform it with all the transformers, and
+load it into the loader.
+
+Now that we have these things, we can configure our bond loader, but we
+can also configure one for foreign exchange and interest rates without
+writing any new code, just new configuration.
+
+I can now manage dozens of these processes, and if I need to add more
+steps, I can write a new transformer. For example, here's one that
+forward fills the data, which is hugely important in financial data with
+all the different kinds of holiday calendars and sometimes just plain
+old missing data: When a point is missing for a day, it takes the point
+for the previous day (filling it forward).
+
+Now I can easily add forward filling to my FX process by changing its
+configuration.
+
+So, with Beam::Wire configuring our objects, and Beam::Runner to run
+them, we can a build huge but maintainable data platform that can handle
+any kind of data we might encounter.
 

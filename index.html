@@ -35,6 +35,25 @@
         <!--[if lt IE 9]>
         <script src="reveal.js/lib/js/html5shiv.js"></script>
         <![endif]-->
+
+        <!-- Custom style rules -->
+        <style>
+            .flex-row {
+                display: flex;
+                flex: 1 1;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .flex-row pre {
+                width: auto;
+            }
+            .reveal pre.larger {
+                font-size: 0.75em;
+            }
+            .reveal pre.largest {
+                font-size: 0.95em;
+            }
+        </style>
     </head>
 
     <body>
@@ -44,7 +63,7 @@
             <!-- Any section element inside of this container is displayed as a slide -->
             <div class="slides">
 
-                <section data-markdown="slides.md" data-separator="^------\n" data-separator-vertical="^---\n"></section>
+                <section data-markdown="slides.md" data-separator="^------\n" data-separator-vertical="^---\n" data-separator-notes="^Note:"></section>
 
             </div>
 
