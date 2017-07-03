@@ -24,8 +24,9 @@ by [Doug Bell](http://preaction.me)
 
 [CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/legalcode)  
 
-<small>
-For speaker view, press `S`<br/>
+<small data-markdown>
+For navigation help, press `?`  
+For speaker view, press `S`  
 For full-screen, press `F`
 </small>
 </div>
